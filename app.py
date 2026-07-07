@@ -525,11 +525,11 @@ APP_HTML = r"""<!doctype html>
     position: absolute;
     border-radius: 8px;
     padding: 5px 8px;
-    overflow: hidden;
     color: #fff;
     border: none;
     text-align: left;
     box-shadow: 0 1px 3px rgba(20, 10, 8, 0.25);
+    z-index: 1;
   }
   .entry-block .eb-time {
     font-size: 12px;
@@ -1695,7 +1695,7 @@ APP_HTML = r"""<!doctype html>
       block.type = "button";
       block.className = "entry-block";
       block.style.top = top + "px";
-      block.style.height = (height - 2) + "px";
+      block.style.minHeight = (height - 2) + "px";
       block.style.left = "calc(" + leftPct + "% + 2px)";
       block.style.width = "calc(" + widthPct + "% - 6px)";
       block.style.background = registrantColor(e.registeredBy);
