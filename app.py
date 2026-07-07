@@ -827,7 +827,11 @@ APP_HTML = r"""<!doctype html>
     padding: 6px 8px;
     border-radius: var(--radius-sm);
     background: var(--surface-2);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.08s ease;
   }
+  .user-row:hover { background: var(--accent-soft); }
+  .user-row:active { transform: scale(0.98); }
   .user-avatar {
     width: 26px;
     height: 26px;
@@ -841,6 +845,56 @@ APP_HTML = r"""<!doctype html>
     flex-shrink: 0;
   }
   .user-name { font-size: 13.5px; font-weight: 600; }
+
+  /* ---------- user schedule page ---------- */
+  .us-avatar-lg { width: 36px; height: 36px; font-size: 15px; flex-shrink: 0; }
+  .us-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .us-day-group { margin-bottom: 16px; }
+  .us-day-group .us-list { margin-bottom: 0; }
+  .us-day-header {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .us-today-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .us-entry {
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .us-entry .us-time {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-strong);
+    padding-top: 1px;
+  }
+  .us-entry-body { min-width: 0; }
+  .us-entry-title { font-size: 14.5px; font-weight: 700; }
+  .us-entry-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+  .us-empty {
+    font-size: 13.5px;
+    color: var(--text-muted);
+    padding: 14px 4px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .us-empty.small { padding: 10px 4px; }
 
   .view { display: none; }
   .view.active { display: block; }
@@ -928,6 +982,29 @@ APP_HTML = r"""<!doctype html>
       </div>
     </div>
     <button type="button" class="fab" id="btn-add-entry" aria-label="일정 추가">+</button>
+  </section>
+
+  <!-- ===== USER SCHEDULE ===== -->
+  <section class="view" id="view-user-schedule">
+    <div class="topbar">
+      <button class="back" id="btn-us-back" aria-label="뒤로">‹</button>
+      <span class="user-avatar us-avatar-lg" id="us-avatar"></span>
+      <div class="titles">
+        <h1 id="us-name">이름</h1>
+        <p>일일 · 주간 일정</p>
+      </div>
+      <img class="cosmax-logo brand-mini-logo" alt="COSMAX" />
+    </div>
+    <main>
+      <div class="section-label">오늘 일정</div>
+      <div class="us-list" id="us-today-list"></div>
+
+      <div class="section-label" style="margin-top:20px; display:flex; justify-content:space-between; align-items:baseline;">
+        <span>이번 주 일정</span>
+        <span id="us-week-count" style="text-transform:none; font-weight:600; color:var(--text-muted);"></span>
+      </div>
+      <div id="us-week-list"></div>
+    </main>
   </section>
 
   <!-- ===== ADD / EDIT ENTRY SHEET ===== -->
@@ -1114,6 +1191,7 @@ APP_HTML = r"""<!doctype html>
     if (activeView.id === "view-home") renderHome();
     else if (activeView.id === "view-calendar") renderCalendar();
     else if (activeView.id === "view-day") renderDayView();
+    else if (activeView.id === "view-user-schedule") renderUserSchedule(nav.selectedUser);
   }
 
   function initSync() {
@@ -1883,13 +1961,111 @@ APP_HTML = r"""<!doctype html>
     USER_LIST.forEach(function (name) {
       var row = document.createElement("div");
       row.className = "user-row";
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
       row.innerHTML =
         '<span class="user-avatar" style="background:' + registrantColor(name) + '">' + esc(name.charAt(0)) + "</span>" +
         '<span class="user-name">' + esc(name) + "</span>";
+      var goToSchedule = function () {
+        closeUserList();
+        openUserSchedule(name);
+      };
+      row.addEventListener("click", goToSchedule);
+      row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          goToSchedule();
+        }
+      });
       list.appendChild(row);
     });
     document.getElementById("userlist-count").textContent = "(" + USER_LIST.length + "명)";
   }
+
+  /* ---------- USER SCHEDULE PAGE ---------- */
+  function getEntriesForUserOnDate(name, dateStr) {
+    return getEntriesForDate(dateStr, { type: "all" })
+      .filter(function (e) { return e.registeredBy === name; })
+      .sort(function (a, b) { return a.startTime.localeCompare(b.startTime); });
+  }
+
+  function renderUserScheduleEntry(e) {
+    var row = document.createElement("div");
+    row.className = "us-entry";
+    row.innerHTML =
+      '<span class="us-time mono">' + esc(e.startTime) + "–" + esc(e.endTime) + "</span>" +
+      '<div class="us-entry-body">' +
+      '<div class="us-entry-title">' + esc(e.title) + "</div>" +
+      '<div class="us-entry-meta">' + esc(e.labName) + " · " + esc(e.projectName) + (e.memo ? " · " + esc(e.memo) : "") + "</div>" +
+      "</div>";
+    return row;
+  }
+
+  function renderUserSchedule(name) {
+    var today = new Date();
+    var todayStr = fmtDate(today);
+
+    document.getElementById("us-name").textContent = name;
+    var avatar = document.getElementById("us-avatar");
+    avatar.textContent = name.charAt(0);
+    avatar.style.background = registrantColor(name);
+
+    var todayList = document.getElementById("us-today-list");
+    todayList.innerHTML = "";
+    var todayEntries = getEntriesForUserOnDate(name, todayStr);
+    if (!todayEntries.length) {
+      todayList.innerHTML = '<div class="us-empty">오늘 등록된 일정이 없습니다.</div>';
+    } else {
+      todayEntries.forEach(function (e) { todayList.appendChild(renderUserScheduleEntry(e)); });
+    }
+
+    var weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+    var weekList = document.getElementById("us-week-list");
+    weekList.innerHTML = "";
+    var weekTotal = 0;
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      var dStr = fmtDate(d);
+      var entries = getEntriesForUserOnDate(name, dStr);
+      weekTotal += entries.length;
+
+      var group = document.createElement("div");
+      group.className = "us-day-group";
+      var header = document.createElement("div");
+      header.className = "us-day-header";
+      header.innerHTML =
+        (d.getMonth() + 1) + "월 " + d.getDate() + "일 (" + WEEKDAY_KO[d.getDay()] + ")" +
+        (dStr === todayStr ? ' <span class="us-today-badge">오늘</span>' : "");
+      group.appendChild(header);
+
+      if (!entries.length) {
+        var empty = document.createElement("div");
+        empty.className = "us-empty small";
+        empty.textContent = "일정 없음";
+        group.appendChild(empty);
+      } else {
+        var innerList = document.createElement("div");
+        innerList.className = "us-list";
+        entries.forEach(function (e) { innerList.appendChild(renderUserScheduleEntry(e)); });
+        group.appendChild(innerList);
+      }
+      weekList.appendChild(group);
+    }
+    document.getElementById("us-week-count").textContent = "총 " + weekTotal + "건";
+  }
+
+  function openUserSchedule(name) {
+    nav.selectedUser = name;
+    showView("view-user-schedule");
+    renderUserSchedule(name);
+  }
+
+  document.getElementById("btn-us-back").addEventListener("click", function () {
+    showView("view-home");
+    renderHome();
+  });
 
   function openUserList() {
     renderUserList();
