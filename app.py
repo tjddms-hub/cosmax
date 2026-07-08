@@ -767,6 +767,7 @@ APP_HTML = r"""<!doctype html>
     transition: opacity 0.15s ease;
   }
   .modal-wrap.open { opacity: 1; pointer-events: auto; }
+  #modal-wrap { z-index: 31; }
   .modal-wrap .backdrop2 {
     position: absolute;
     inset: 0;
@@ -1082,6 +1083,7 @@ APP_HTML = r"""<!doctype html>
       <h3>사용자 목록 <span id="userlist-count"></span></h3>
       <div class="user-list" id="user-list"></div>
       <div class="modal-actions">
+        <button id="userlist-add">+ 사용자 추가</button>
         <button class="primary" id="userlist-close">닫기</button>
       </div>
     </div>
@@ -1811,7 +1813,7 @@ APP_HTML = r"""<!doctype html>
     var preferred = defaultProjectForScope();
     if (preferred) document.getElementById("select-project").value = preferred;
     document.getElementById("input-title").value = "";
-    populateRegistrantSelect(localStorage.getItem(USERNAME_KEY) || USER_LIST[0]);
+    populateRegistrantSelect(localStorage.getItem(USERNAME_KEY) || state.users[0]);
     setStartTime("09:00");
     setEndTime("10:00");
   }
@@ -1833,7 +1835,7 @@ APP_HTML = r"""<!doctype html>
     setStartTime(entry.startTime);
     setEndTime(entry.endTime || addOneHour(entry.startTime));
     document.getElementById("input-title").value = entry.title;
-    populateRegistrantSelect(entry.registeredBy || USER_LIST[0]);
+    populateRegistrantSelect(entry.registeredBy || state.users[0]);
     document.getElementById("sheet-title-label").textContent = "일정 수정";
     document.getElementById("submit-btn").textContent = "수정 완료";
     document.getElementById("btn-delete-entry").style.display = "";
@@ -1932,7 +1934,7 @@ APP_HTML = r"""<!doctype html>
   });
 
   /* ---------- USER LIST ---------- */
-  var USER_LIST = [
+  var DEFAULT_USERS = [
     "강민서", "고은우", "권은서", "김민준", "남도윤",
     "노은채", "문서진", "박도현", "배현진", "백승우",
     "서다은", "손유나", "송나연", "신태윤", "안재원",
@@ -1941,10 +1943,19 @@ APP_HTML = r"""<!doctype html>
     "최지우", "한예린", "허지안", "홍채원", "황소율"
   ].sort(function (a, b) { return a.localeCompare(b, "ko"); });
 
+  if (!state.users || !state.users.length) {
+    state.users = DEFAULT_USERS.slice();
+    save(state);
+  }
+
+  function sortUsers() {
+    state.users.sort(function (a, b) { return a.localeCompare(b, "ko"); });
+  }
+
   function populateRegistrantSelect(selected) {
     var sel = document.getElementById("select-registrant");
     sel.innerHTML = "";
-    var names = USER_LIST.slice();
+    var names = state.users.slice();
     if (selected && names.indexOf(selected) === -1) names.unshift(selected);
     names.forEach(function (name) {
       var opt = document.createElement("option");
@@ -1958,7 +1969,7 @@ APP_HTML = r"""<!doctype html>
   function renderUserList() {
     var list = document.getElementById("user-list");
     list.innerHTML = "";
-    USER_LIST.forEach(function (name) {
+    state.users.forEach(function (name) {
       var row = document.createElement("div");
       row.className = "user-row";
       row.setAttribute("role", "button");
@@ -1979,8 +1990,21 @@ APP_HTML = r"""<!doctype html>
       });
       list.appendChild(row);
     });
-    document.getElementById("userlist-count").textContent = "(" + USER_LIST.length + "명)";
+    document.getElementById("userlist-count").textContent = "(" + state.users.length + "명)";
   }
+
+  document.getElementById("userlist-add").addEventListener("click", function () {
+    openModal("사용자 추가", "이름 입력", function (name) {
+      if (state.users.indexOf(name) !== -1) {
+        alert("이미 등록된 사용자예요.");
+        return;
+      }
+      state.users.push(name);
+      sortUsers();
+      save(state);
+      renderUserList();
+    });
+  });
 
   /* ---------- USER SCHEDULE PAGE ---------- */
   function getEntriesForUserOnDate(name, dateStr) {
